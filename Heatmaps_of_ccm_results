@@ -1,0 +1,160 @@
+#This code visualizes the ccm output in a heatmap using the maximum rho value obtained from ccm plots
+
+load("C:/Users/Jesse/Desktop/ScrippsProjects/PierData/AlgaeEnvt/VOCs_Algae_ccm_Workspace_scaled_tp1.RData")
+#load("C:/Users/Jesse/Desktop/ScrippsProjects/PierData/AlgaeEnvt/VOCs_Algae_ccm_Workspace_scaled_tp0.RData")
+
+vars <- c("CH3Cl","CH3Br","CH3I","CH2Br2","CHCl3","CHBr3","COS","benzene","toluene","Asterionellopsis.spp.","Bacteriastrum.spp.","Cerataulina.spp.","Chaetoceros.spp.","Cylindrotheca.closterium","Dactyliosolen.blavyanus","Dactyliosolen.fragilissimus","Eucampia.zodiacus","Grammatophora.spp.","Guinardia.delicatula","Guinardia.striata","Haslea.warrickae","Hemiaulus.hauckii","Hemiaulus.spp.","Leptocylindrus.danicus","Leptocylindrus.minimus","Licmophora.spp.","Navicula.spp.","Nitzschia.spp.","Odontella.aurita","Plagiogramma.vanheurckii","Pleurosigma.normannii","Proboscia.alata","Pseudo.nitzschia.delicatissima.group.small","Pseudo.nitzschia.delicatissima.group.large","Pseudo.nitzschia.seriata.group.small","Pseudo.nitzschia.seriata.group.large","Rhizosolenia.spp.","Skeletonema.costatum","Striatella.unipunctata","Thalassionema.nitzschiodides","Thalassionema.spp.","Thalassiosira.spp.","Thalassiothrix.longissima","Other.diatoms.small","Other.diatoms.large","Akashiwo.sanguinea","Ceratium.divericatum","Ceratium.falcatiforme","Ceratium.furca","Ceratium.fusus","Ceratium.lineatum","Cochlodinium.spp.","Dinophysis.acuminata","Dinophysis.caudata","Dinophysis.spp.","Gymnodinium.spp.","Gonyaulax.spinifera","Gonyaulax.spp.","Gyrodinium.spp.","Lingulodinium.polyedra","Prorocentrum.gracile","Prorocentrum.micans","Prorocentrum.spp.","Protoperidinium.divergens","Protoperidinium.steinii","Protoperidinium.tuba","Protoperidinium.spp.","Scrippsiella.trochoidea","Other.dinoflagellates.small","Other.dinoflagellates.large","Total.Diatoms","Total.Dinoflagellates","Copepods","Nauplii.larvae","Ciliates","Other.Zooplankton","Silicoflagellates","Euglenids","Dino.cysts","Total.Zooplankton","Total.Other","CH4","N2O","Temp","Avg_Chloro","Avg._Phaeo","Nitrate","Phosphate","Silicate","Nitrite","Ammonia","Domoic_Acid")
+
+#########################################
+#Heatmap Stuff
+#########################################
+
+#Other factor causes VOC of interest
+Causes_CH4 <- lapply(vars, function(var) {
+  max(na.omit(CH4_xmap_var_means[[var]]$rho))})
+names(Causes_CH4)<-vars
+
+Causes_N2O <- lapply(vars, function(var) {
+  max(na.omit(N2O_xmap_var_means[[var]]$rho))})
+names(Causes_N2O)<-vars
+
+Causes_CH3Cl <- lapply(vars, function(var) {
+  max(na.omit(CH3Cl_xmap_var_means[[var]]$rho))})
+names(Causes_CH3Cl)<-vars
+
+Causes_CH3Br <- lapply(vars, function(var) {
+  max(na.omit(CH3Br_xmap_var_means[[var]]$rho))})
+names(Causes_CH3Br)<-vars
+
+Causes_CH3I <- lapply(vars, function(var) {
+  max(na.omit(CH3I_xmap_var_means[[var]]$rho))})
+names(Causes_CH3I)<-vars
+
+Causes_CH2Br2 <- lapply(vars, function(var) {
+  max(na.omit(CH2Br2_xmap_var_means[[var]]$rho))})
+names(Causes_CH2Br2)<-vars
+
+Causes_CHCl3 <- lapply(vars, function(var) {
+  max(na.omit(CHCl3_xmap_var_means[[var]]$rho))})
+names(Causes_CHCl3)<-vars
+
+Causes_CHBr3 <- lapply(vars, function(var) {
+  max(na.omit(CHBr3_xmap_var_means[[var]]$rho))})
+names(Causes_CHBr3)<-vars
+
+Causes_COS <- lapply(vars, function(var) {
+  max(na.omit(COS_xmap_var_means[[var]]$rho))})
+names(Causes_COS)<-vars
+
+Causes_benzene <- lapply(vars, function(var) {
+  max(na.omit(benzene_xmap_var_means[[var]]$rho))})
+names(Causes_benzene)<-vars
+
+Causes_toluene <- lapply(vars, function(var) {
+  max(na.omit(toluene_xmap_var_means[[var]]$rho))})
+names(Causes_toluene)<-vars
+
+Causes_Temp <- lapply(vars, function(var) {
+  max(na.omit(Temp_xmap_var_means[[var]]$rho))})
+names(Causes_Temp)<-vars
+
+Causes_Avg._Phaeo <- lapply(vars, function(var) {
+  max(na.omit(Avg._Phaeo_xmap_var_means[[var]]$rho))})
+names(Causes_Avg._Phaeo)<-vars
+
+Causes_Avg_Chloro <- lapply(vars, function(var) {
+  max(na.omit(Avg_Chloro_xmap_var_means[[var]]$rho))})
+names(Causes_Avg_Chloro)<-vars
+
+Causes_Total.Zooplankton <- lapply(vars, function(var) {
+  max(na.omit(Total.Zooplankton_xmap_var_means[[var]]$rho))})
+names(Causes_Total.Zooplankton)<-vars
+
+
+#VOC of interest causes other factor
+CH4_causes <- lapply(vars, function(var) {
+  max(na.omit(var_xmap_CH4_means[[var]]$rho))})
+names(CH4_causes)<-vars
+
+N2O_causes <- lapply(vars, function(var) {
+  max(na.omit(var_xmap_N2O_means[[var]]$rho))})
+names(N2O_causes)<-vars
+
+CH3Cl_causes <- lapply(vars, function(var) {
+  max(na.omit(var_xmap_CH3Cl_means[[var]]$rho))})
+names(CH3Cl_causes)<-vars
+
+CH3Br_causes <- lapply(vars, function(var) {
+  max(na.omit(var_xmap_CH3Br_means[[var]]$rho))})
+names(CH3Br_causes)<-vars
+
+CH3I_causes <- lapply(vars, function(var) {
+  max(na.omit(var_xmap_CH3I_means[[var]]$rho))})
+names(CH3I_causes)<-vars
+
+CH2Br2_causes <- lapply(vars, function(var) {
+  max(na.omit(var_xmap_CH2Br2_means[[var]]$rho))})
+names(CH2Br2_causes)<-vars
+
+CHCl3_causes <- lapply(vars, function(var) {
+  max(na.omit(var_xmap_CHCl3_means[[var]]$rho))})
+names(CHCl3_causes)<-vars
+
+CHBr3_causes <- lapply(vars, function(var) {
+  max(na.omit(var_xmap_CHBr3_means[[var]]$rho))})
+names(CHBr3_causes)<-vars
+
+COS_causes <- lapply(vars, function(var) {
+  max(na.omit(var_xmap_COS_means[[var]]$rho))})
+names(COS_causes)<-vars
+
+benzene_causes <- lapply(vars, function(var) {
+  max(na.omit(var_xmap_benzene_means[[var]]$rho))})
+names(benzene_causes)<-vars
+
+toluene_causes <- lapply(vars, function(var) {
+  max(na.omit(var_xmap_toluene_means[[var]]$rho))})
+names(toluene_causes)<-vars
+
+Temp_causes <- lapply(vars, function(var) {
+  max(na.omit(var_xmap_Temp_means[[var]]$rho))})
+names(Temp_causes)<-vars
+
+Avg._Phaeo_causes <- lapply(vars, function(var) {
+  max(na.omit(var_xmap_Avg._Phaeo_means[[var]]$rho))})
+names(Avg._Phaeo_causes)<-vars
+
+Avg_Chloro_causes <- lapply(vars, function(var) {
+  max(na.omit(var_xmap_Avg_Chloro_means[[var]]$rho))})
+names(Avg_Chloro_causes)<-vars
+
+Total.Zooplankton_causes <- lapply(vars, function(var) {
+  max(na.omit(var_xmap_Total.Zooplankton_means[[var]]$rho))})
+names(Total.Zooplankton_causes)<-vars
+
+
+#Making the matrix
+VOC_Causes_Matrix<-cbind(as.numeric(N2O_causes),as.numeric(CH4_causes),as.numeric(CH3Cl_causes),as.numeric(CH3Br_causes),as.numeric(CH3I_causes),as.numeric(CH2Br2_causes),as.numeric(CHCl3_causes),as.numeric(CHBr3_causes),as.numeric(COS_causes),as.numeric(benzene_causes),as.numeric(toluene_causes),as.numeric(Temp_causes),as.numeric(Avg._Phaeo_causes),as.numeric(Avg_Chloro_causes),as.numeric(Total.Zooplankton_causes))
+row.names(VOC_Causes_Matrix)<-c(vars)
+colnames(VOC_Causes_Matrix)<-c("CH4","N2O","CH3Cl","CH3Br","CH3I","CH2Br2","CHCl3","CHBr3","COS","benzene","toluene","Temp","Avg._Phaeo","Avg_Chloro","Total.Zooplankton")
+
+VOC_Causes_Algae<-rbind(VOC_Causes_Matrix[10:81,1:15],VOC_Causes_Matrix[84:86,1:15])
+
+VOC_Causes_Algae[VOC_Causes_Algae < 0] <- 0
+
+
+Causes_VOC_Matrix<-cbind(as.numeric(Causes_N2O),as.numeric(Causes_CH4),as.numeric(Causes_CH3Cl),as.numeric(Causes_CH3Br),as.numeric(Causes_CH3I),as.numeric(Causes_CH2Br2),as.numeric(Causes_CHCl3),as.numeric(Causes_CHBr3),as.numeric(Causes_COS),as.numeric(Causes_benzene),as.numeric(Causes_toluene),as.numeric(Causes_Temp),as.numeric(Causes_Avg._Phaeo),as.numeric(Causes_Avg_Chloro),as.numeric(Causes_Total.Zooplankton))
+row.names(Causes_VOC_Matrix)<-c(vars)
+colnames(Causes_VOC_Matrix)<-c("CH4","N2O","CH3Cl","CH3Br","CH3I","CH2Br2","CHCl3","CHBr3","COS","benzene","toluene","Temp","Avg._Phaeo","Avg_Chloro","Total.Zooplankton")
+
+Algae_Causes_VOC<-rbind(Causes_VOC_Matrix[10:81,1:15],Causes_VOC_Matrix[84:86,1:15])
+
+Algae_Causes_VOC[Algae_Causes_VOC < 0] <- 0
+
+
+
+my_palette <- colorRampPalette(c("white", "blue"))(n = 1000)
+
+heatmap <- heatmap(VOC_Causes_Algae,col=my_palette,scale="none",cexCol=0.75,Rowv=NA,Colv=NA,cexRow=0.75,margins=c(8,8),na.rm=TRUE,main="VOC Causes Algae with a lag of 1 week")
+
+heatmap <- heatmap(Algae_Causes_VOC,col=my_palette,scale="none",cexCol=0.75,Rowv=NA,Colv=NA,cexRow=0.75,margins=c(8,8),na.rm=TRUE,main="Algae Causes VOC with a lg of 1 week")
