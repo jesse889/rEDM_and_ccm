@@ -157,4 +157,4 @@ my_palette <- colorRampPalette(c("white", "blue"))(n = 1000)
 
 heatmap <- heatmap(VOC_Causes_Algae,col=my_palette,scale="none",cexCol=0.75,Rowv=NA,Colv=NA,cexRow=0.75,margins=c(8,8),na.rm=TRUE,main="VOC Causes Algae with a lag of 1 week")
 
-heatmap <- heatmap(Algae_Causes_VOC,col=my_palette,scale="none",cexCol=0.75,Rowv=NA,Colv=NA,cexRow=0.75,margins=c(8,8),na.rm=TRUE,main="Algae Causes VOC with a lg of 1 week")
+heatmap <- heatmap(Algae_Causes_VOC,col=my_palette,scale="none",cexCol=0.75,Rowv=NA,Colv=NA,cexRow=0.75,margins=c(8,8),na.rm=TRUE,main="Algae Causes VOC with a lag of 1 week")
