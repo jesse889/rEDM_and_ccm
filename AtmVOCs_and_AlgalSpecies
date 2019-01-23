@@ -1,0 +1,744 @@
+#This runs code runs the basics of the rEDM package
+#It starts with finding the optimal embeding dimension for various time-series using Simplex Projection
+#Ensures that the time-series are non-linear using S-maps
+#Then it runs convergent cross mapping to identify "causality" using a lag of 1 week
+#https://cran.r-project.org/web/packages/rEDM/vignettes/rEDM-tutorial.html
+
+Data<-read.csv("AlgaeEnvMedusaMultiGC_withSDs_AnalysisReady.csv", header=T, na.strings="NA")
+ls(Data)
+
+#Note: Got rid of Algal species that were present less than 5% of the time (so less than 17 days in the 349 represented)
+
+dim(Data)
+
+CommunityEnvtVOCs<-Data[c(1:10,12:72,75:85,95:96,100,104,107:112,114)]
+CommunityEnvtVOCsComplete<-CommunityEnvtVOCs[complete.cases(CommunityEnvtVOCs$Other.diatoms.large),]
+
+dim(CommunityEnvtVOCsComplete)
+
+x <- CommunityEnvtVOCsComplete[,2:93]
+Scaledx<-scale(x, center = FALSE, scale = TRUE)
+Scaledx<-as.data.frame(Scaledx)
+day <- CommunityEnvtVOCsComplete$day
+CommunityEnvtVOCsComplete <- cbind (day,Scaledx)
+
+library("rEDM")
+
+colSums(CommunityEnvtVOCsComplete != 0)>17 #should all be NA or True (True for algae)
+
+
+composite_lib <- c(1, 364)
+composite_pred <- c(1, 364)
+
+
+#Find optimal embedding dimension (maximized rho) using simplex--this is basically univariate analysis with each time series lagged components used to predict current values (highest rho tells us how many embedding dimensions to use)
+#If things are autocorrelated then rho will be extremely high during this univariate analysis
+
+simplex_output <- simplex(CommunityEnvtVOCsComplete$Total.Diatoms, lib=composite_lib,pred=composite_pred,E = 1:10)
+
+par(mar = c(4, 4, 1, 1), mgp = c(2.5, 1, 0))
+plot(simplex_output$E, simplex_output$rho, type = "l", xlab = "Embedding Dimension (E)", 
+     ylab = "Forecast Skill (rho)")
+
+#Optimal E is 5 for tau = 1 (time delay function of 1 time step)
+
+vars <- c("CH3Cl","CH3Br","CH3I","CH2Br2","CHCl3","CHBr3","COS","benzene","toluene","Asterionellopsis.spp.","Bacteriastrum.spp.","Cerataulina.spp.","Chaetoceros.spp.","Cylindrotheca.closterium","Dactyliosolen.blavyanus","Dactyliosolen.fragilissimus","Eucampia.zodiacus","Grammatophora.spp.","Guinardia.delicatula","Guinardia.striata","Haslea.warrickae","Hemiaulus.hauckii","Hemiaulus.spp.","Leptocylindrus.danicus","Leptocylindrus.minimus","Licmophora.spp.","Navicula.spp.","Nitzschia.spp.","Odontella.aurita","Plagiogramma.vanheurckii","Pleurosigma.normannii","Proboscia.alata","Pseudo.nitzschia.delicatissima.group.small","Pseudo.nitzschia.delicatissima.group.large","Pseudo.nitzschia.seriata.group.small","Pseudo.nitzschia.seriata.group.large","Rhizosolenia.spp.","Skeletonema.costatum","Striatella.unipunctata","Thalassionema.nitzschiodides","Thalassionema.spp.","Thalassiosira.spp.","Thalassiothrix.longissima","Other.diatoms.small","Other.diatoms.large","Akashiwo.sanguinea","Ceratium.divericatum","Ceratium.falcatiforme","Ceratium.furca","Ceratium.fusus","Ceratium.lineatum","Cochlodinium.spp.","Dinophysis.acuminata","Dinophysis.caudata","Dinophysis.spp.","Gymnodinium.spp.","Gonyaulax.spinifera","Gonyaulax.spp.","Gyrodinium.spp.","Lingulodinium.polyedra","Prorocentrum.gracile","Prorocentrum.micans","Prorocentrum.spp.","Protoperidinium.divergens","Protoperidinium.steinii","Protoperidinium.tuba","Protoperidinium.spp.","Scrippsiella.trochoidea","Other.dinoflagellates.small","Other.dinoflagellates.large","Total.Diatoms","Total.Dinoflagellates","Copepods","Nauplii.larvae","Ciliates","Other.Zooplankton","Silicoflagellates","Euglenids","Dino.cysts","Total.Zooplankton","Total.Other","CH4","N2O","Temp","Avg_Chloro","Avg._Phaeo","Nitrate","Phosphate","Silicate","Nitrite","Ammonia","Domoic_Acid")
+
+
+simplex_out <- lapply(vars, function(var) {
+  simplex(CommunityEnvtVOCsComplete[, c("day", var)], E = 1:10, lib = composite_lib, pred = composite_pred)
+})
+names(simplex_out) <- vars
+
+par(mfrow = c(2, 2))
+for (var in names(simplex_out)) {
+  plot(simplex_out[[var]]$E, simplex_out[[var]]$rho, type = "l", xlab = "Embedding Dimension (E)", 
+       ylab = "Forecast Skill (rho)", main = var)
+}
+
+best_E <- sapply(simplex_out, function(df) {
+  df$E[which.max(df$rho)]
+})
+best_E
+
+
+#Making sure things are non-linear using our optimal E
+#We are varying theta here
+#when theta>0, nearby points receive larger weights, allowing the local linear map to vary in state-space and accommodate nonlinear behavior
+#If a theta that is not zero has the highest forecast skill then we have non-linear dynamics
+
+smap_out <- lapply(vars, function(var) {
+  s_map(CommunityEnvtVOCsComplete[, c("day", var)], E = best_E[var], lib = composite_lib, 
+        pred = composite_pred)
+})
+names(smap_out) <- names(simplex_out)
+
+par(mfrow = c(2, 2))
+for (var in names(smap_out)) {
+  plot(smap_out[[var]]$theta, smap_out[[var]]$rho, type = "l", xlab = "Nonlinearity (theta)", 
+       ylab = "Forecast Skill (rho)", main = var)
+}
+
+#Many suggest non-linear dynamics 
+
+
+#CCM
+
+#Remember to run this or you will get an error
+lib_sizes <- c(seq(1, 364, by = 5))
+
+
+###################################
+#CH4
+
+ccm_out_CH4Lib <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = "CH4",
+      target_column = var, E = best_E["CH4"],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_CH4Lib)<-vars
+
+ccm_out_CH4Tar <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = var,
+      target_column = "CH4", E = best_E[var],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_CH4Tar)<-vars
+
+CH4_xmap_var_means <- lapply(vars, function(var) {ccm_means(ccm_out_CH4Lib[[var]])})
+var_xmap_CH4_means <- lapply(vars, function(var) {ccm_means(ccm_out_CH4Tar[[var]])})
+
+names(CH4_xmap_var_means)<-vars
+names(var_xmap_CH4_means)<-vars
+
+#Visulize it:
+par(mfrow = c(2, 2))
+for (var in names(CH4_xmap_var_means)) {
+  plot(CH4_xmap_var_means[[var]]$lib_size, pmax(0, CH4_xmap_var_means[[var]]$rho), type="l",
+                                                  xlab = "Library Size", ylab = "Cross Map Skill (rho)", 
+                                                  col = "red", ylim = c(0, 1), lwd = 2)
+  lines(var_xmap_CH4_means[[var]]$lib_size, pmax(0, var_xmap_CH4_means[[var]]$rho), col = "blue", 
+        lwd = 2)
+  legend(x = "topleft", col = c("red", "blue"), lwd = 2, legend = c("CH4_xmap_var", 
+      "var_xmap_CH4"), inset = 0.02, bty = "n", cex = 0.8)
+  title(names(CH4_xmap_var_means[var]))
+  abline(h = 0, lty = 3)
+}
+
+
+#Just making sure the above code is correct for individual variables
+CH4_xmap_Temp <- ccm(CommunityEnvtVOCsComplete, lib_column = "CH4", 
+                              target_column = "Temp", E = best_E["CH4"], num_samples = 100, lib_sizes = lib_sizes, 
+                              random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+Temp_xmap_CH4 <- ccm(CommunityEnvtVOCsComplete, lib_column = "Temp", 
+                              target_column = "CH4", E = best_E["Temp"], num_samples = 100, lib_sizes = lib_sizes, 
+                              silent = TRUE, tau = 1, tp=1)
+
+CH4_xmap_Temp_means <- ccm_means(CH4_xmap_Temp)
+Temp_xmap_CH4_means <- ccm_means(Temp_xmap_CH4)
+
+par(mfrow = c(1, 1))
+plot(CH4_xmap_Temp_means$lib_size, pmax(0, CH4_xmap_Temp_means$rho), type = "l", 
+     xlab = "Library Size", ylab = "Cross Map Skill (rho)", col = "red", ylim = c(0, 1), lwd = 2)
+lines(Temp_xmap_CH4_means$lib_size, pmax(0, Temp_xmap_CH4_means$rho), col = "blue", 
+      lwd = 2)
+legend(x = "topleft", col = c("red", "blue"), lwd = 2, legend = c("CH4_xmap_Temp", 
+                                                                  "Temp_xmap_CH4_tm"), inset = 0.02, bty = "n", cex = 0.8)
+abline(h = 0, lty = 3)
+
+
+###########################################
+#N2O
+
+ccm_out_N2OLib <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = "N2O",
+      target_column = var, E = best_E["N2O"],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_N2OLib)<-vars
+
+ccm_out_N2OTar <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = var,
+      target_column = "N2O", E = best_E[var],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_N2OTar)<-vars
+
+N2O_xmap_var_means <- lapply(vars, function(var) {ccm_means(ccm_out_N2OLib[[var]])})
+var_xmap_N2O_means <- lapply(vars, function(var) {ccm_means(ccm_out_N2OTar[[var]])})
+
+names(N2O_xmap_var_means)<-vars
+names(var_xmap_N2O_means)<-vars
+
+#Visulize it:
+par(mfrow = c(2, 2))
+for (var in names(N2O_xmap_var_means)) {
+  plot(N2O_xmap_var_means[[var]]$lib_size, pmax(0, N2O_xmap_var_means[[var]]$rho), type="l",
+       xlab = "Library Size", ylab = "Cross Map Skill (rho)", 
+       col = "red", ylim = c(0, 1), lwd = 2)
+  lines(var_xmap_N2O_means[[var]]$lib_size, pmax(0, var_xmap_N2O_means[[var]]$rho), col = "blue", 
+        lwd = 2)
+  legend(x = "topleft", col = c("red", "blue"), lwd = 2, legend = c("N2O_xmap_var", 
+                                                                    "var_xmap_N2O"), inset = 0.02, bty = "n", cex = 0.8)
+  title(names(N2O_xmap_var_means[var]))
+  abline(h = 0, lty = 3)
+}
+
+
+
+###########################################
+#CH3Cl
+
+ccm_out_CH3ClLib <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = "CH3Cl",
+      target_column = var, E = best_E["CH3Cl"],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_CH3ClLib)<-vars
+
+ccm_out_CH3ClTar <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = var,
+      target_column = "CH3Cl", E = best_E[var],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_CH3ClTar)<-vars
+
+CH3Cl_xmap_var_means <- lapply(vars, function(var) {ccm_means(ccm_out_CH3ClLib[[var]])})
+var_xmap_CH3Cl_means <- lapply(vars, function(var) {ccm_means(ccm_out_CH3ClTar[[var]])})
+
+names(CH3Cl_xmap_var_means)<-vars
+names(var_xmap_CH3Cl_means)<-vars
+
+#Visulize it:
+par(mfrow = c(2, 2))
+for (var in names(CH3Cl_xmap_var_means)) {
+  plot(CH3Cl_xmap_var_means[[var]]$lib_size, pmax(0, CH3Cl_xmap_var_means[[var]]$rho), type="l",
+       xlab = "Library Size", ylab = "Cross Map Skill (rho)", 
+       col = "red", ylim = c(0, 1), lwd = 2)
+  lines(var_xmap_CH3Cl_means[[var]]$lib_size, pmax(0, var_xmap_CH3Cl_means[[var]]$rho), col = "blue", 
+        lwd = 2)
+  legend(x = "topleft", col = c("red", "blue"), lwd = 2, legend = c("CH3Cl_xmap_var", 
+                                                                    "var_xmap_CH3Cl"), inset = 0.02, bty = "n", cex = 0.8)
+  title(names(CH3Cl_xmap_var_means[var]))
+  abline(h = 0, lty = 3)
+}
+
+
+###########################################
+#CH3Br
+
+ccm_out_CH3BrLib <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = "CH3Br",
+      target_column = var, E = best_E["CH3Br"],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_CH3BrLib)<-vars
+
+ccm_out_CH3BrTar <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = var,
+      target_column = "CH3Br", E = best_E[var],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_CH3BrTar)<-vars
+
+CH3Br_xmap_var_means <- lapply(vars, function(var) {ccm_means(ccm_out_CH3BrLib[[var]])})
+var_xmap_CH3Br_means <- lapply(vars, function(var) {ccm_means(ccm_out_CH3BrTar[[var]])})
+
+names(CH3Br_xmap_var_means)<-vars
+names(var_xmap_CH3Br_means)<-vars
+
+#Visulize it:
+par(mfrow = c(2, 2))
+for (var in names(CH3Br_xmap_var_means)) {
+  plot(CH3Br_xmap_var_means[[var]]$lib_size, pmax(0, CH3Br_xmap_var_means[[var]]$rho), type="l",
+       xlab = "Library Size", ylab = "Cross Map Skill (rho)", 
+       col = "red", ylim = c(0, 1), lwd = 2)
+  lines(var_xmap_CH3Br_means[[var]]$lib_size, pmax(0, var_xmap_CH3Br_means[[var]]$rho), col = "blue", 
+        lwd = 2)
+  legend(x = "topleft", col = c("red", "blue"), lwd = 2, legend = c("CH3Br_xmap_var", 
+                                                                    "var_xmap_CH3Br"), inset = 0.02, bty = "n", cex = 0.8)
+  title(names(CH3Br_xmap_var_means[var]))
+  abline(h = 0, lty = 3)
+}
+
+
+###########################################
+#CH3I
+
+ccm_out_CH3ILib <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = "CH3I",
+      target_column = var, E = best_E["CH3I"],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_CH3ILib)<-vars
+
+ccm_out_CH3ITar <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = var,
+      target_column = "CH3I", E = best_E[var],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_CH3ITar)<-vars
+
+CH3I_xmap_var_means <- lapply(vars, function(var) {ccm_means(ccm_out_CH3ILib[[var]])})
+var_xmap_CH3I_means <- lapply(vars, function(var) {ccm_means(ccm_out_CH3ITar[[var]])})
+
+names(CH3I_xmap_var_means)<-vars
+names(var_xmap_CH3I_means)<-vars
+
+#Visulize it:
+par(mfrow = c(2, 2))
+for (var in names(CH3I_xmap_var_means)) {
+  plot(CH3I_xmap_var_means[[var]]$lib_size, pmax(0, CH3I_xmap_var_means[[var]]$rho), type="l",
+       xlab = "Library Size", ylab = "Cross Map Skill (rho)", 
+       col = "red", ylim = c(0, 1), lwd = 2)
+  lines(var_xmap_CH3I_means[[var]]$lib_size, pmax(0, var_xmap_CH3I_means[[var]]$rho), col = "blue", 
+        lwd = 2)
+  legend(x = "topleft", col = c("red", "blue"), lwd = 2, legend = c("CH3I_xmap_var", 
+                                                                    "var_xmap_CH3I"), inset = 0.02, bty = "n", cex = 0.8)
+  title(names(CH3I_xmap_var_means[var]))
+  abline(h = 0, lty = 3)
+}
+
+
+###########################################
+#CH2Br2
+
+ccm_out_CH2Br2Lib <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = "CH2Br2",
+      target_column = var, E = best_E["CH2Br2"],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_CH2Br2Lib)<-vars
+
+ccm_out_CH2Br2Tar <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = var,
+      target_column = "CH2Br2", E = best_E[var],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_CH2Br2Tar)<-vars
+
+CH2Br2_xmap_var_means <- lapply(vars, function(var) {ccm_means(ccm_out_CH2Br2Lib[[var]])})
+var_xmap_CH2Br2_means <- lapply(vars, function(var) {ccm_means(ccm_out_CH2Br2Tar[[var]])})
+
+names(CH2Br2_xmap_var_means)<-vars
+names(var_xmap_CH2Br2_means)<-vars
+
+#Visulize it:
+par(mfrow = c(2, 2))
+for (var in names(CH2Br2_xmap_var_means)) {
+  plot(CH2Br2_xmap_var_means[[var]]$lib_size, pmax(0, CH2Br2_xmap_var_means[[var]]$rho), type="l",
+       xlab = "Library Size", ylab = "Cross Map Skill (rho)", 
+       col = "red", ylim = c(0, 1), lwd = 2)
+  lines(var_xmap_CH2Br2_means[[var]]$lib_size, pmax(0, var_xmap_CH2Br2_means[[var]]$rho), col = "blue", 
+        lwd = 2)
+  legend(x = "topleft", col = c("red", "blue"), lwd = 2, legend = c("CH2Br2_xmap_var", 
+                                                                    "var_xmap_CH2Br2"), inset = 0.02, bty = "n", cex = 0.8)
+  title(names(CH2Br2_xmap_var_means[var]))
+  abline(h = 0, lty = 3)
+}
+
+
+###########################################
+#CHCl3
+
+ccm_out_CHCl3Lib <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = "CHCl3",
+      target_column = var, E = best_E["CHCl3"],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_CHCl3Lib)<-vars
+
+ccm_out_CHCl3Tar <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = var,
+      target_column = "CHCl3", E = best_E[var],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_CHCl3Tar)<-vars
+
+CHCl3_xmap_var_means <- lapply(vars, function(var) {ccm_means(ccm_out_CHCl3Lib[[var]])})
+var_xmap_CHCl3_means <- lapply(vars, function(var) {ccm_means(ccm_out_CHCl3Tar[[var]])})
+
+names(CHCl3_xmap_var_means)<-vars
+names(var_xmap_CHCl3_means)<-vars
+
+#Visulize it:
+par(mfrow = c(2, 2))
+for (var in names(CHCl3_xmap_var_means)) {
+  plot(CHCl3_xmap_var_means[[var]]$lib_size, pmax(0, CHCl3_xmap_var_means[[var]]$rho), type="l",
+       xlab = "Library Size", ylab = "Cross Map Skill (rho)", 
+       col = "red", ylim = c(0, 1), lwd = 2)
+  lines(var_xmap_CHCl3_means[[var]]$lib_size, pmax(0, var_xmap_CHCl3_means[[var]]$rho), col = "blue", 
+        lwd = 2)
+  legend(x = "topleft", col = c("red", "blue"), lwd = 2, legend = c("CHCl3_xmap_var", 
+                                                                    "var_xmap_CHCl3"), inset = 0.02, bty = "n", cex = 0.8)
+  title(names(CHCl3_xmap_var_means[var]))
+  abline(h = 0, lty = 3)
+}
+
+
+###########################################
+#CHBr3
+
+ccm_out_CHBr3Lib <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = "CHBr3",
+      target_column = var, E = best_E["CHBr3"],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_CHBr3Lib)<-vars
+
+ccm_out_CHBr3Tar <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = var,
+      target_column = "CHBr3", E = best_E[var],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_CHBr3Tar)<-vars
+
+CHBr3_xmap_var_means <- lapply(vars, function(var) {ccm_means(ccm_out_CHBr3Lib[[var]])})
+var_xmap_CHBr3_means <- lapply(vars, function(var) {ccm_means(ccm_out_CHBr3Tar[[var]])})
+
+names(CHBr3_xmap_var_means)<-vars
+names(var_xmap_CHBr3_means)<-vars
+
+#Visulize it:
+par(mfrow = c(2, 2))
+for (var in names(CHBr3_xmap_var_means)) {
+  plot(CHBr3_xmap_var_means[[var]]$lib_size, pmax(0, CHBr3_xmap_var_means[[var]]$rho), type="l",
+       xlab = "Library Size", ylab = "Cross Map Skill (rho)", 
+       col = "red", ylim = c(0, 1), lwd = 2)
+  lines(var_xmap_CHBr3_means[[var]]$lib_size, pmax(0, var_xmap_CHBr3_means[[var]]$rho), col = "blue", 
+        lwd = 2)
+  legend(x = "topleft", col = c("red", "blue"), lwd = 2, legend = c("CHBr3_xmap_var", 
+                                                                    "var_xmap_CHBr3"), inset = 0.02, bty = "n", cex = 0.8)
+  title(names(CHBr3_xmap_var_means[var]))
+  abline(h = 0, lty = 3)
+}
+
+
+###########################################
+#COS
+
+ccm_out_COSLib <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = "COS",
+      target_column = var, E = best_E["COS"],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_COSLib)<-vars
+
+ccm_out_COSTar <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = var,
+      target_column = "COS", E = best_E[var],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_COSTar)<-vars
+
+COS_xmap_var_means <- lapply(vars, function(var) {ccm_means(ccm_out_COSLib[[var]])})
+var_xmap_COS_means <- lapply(vars, function(var) {ccm_means(ccm_out_COSTar[[var]])})
+
+names(COS_xmap_var_means)<-vars
+names(var_xmap_COS_means)<-vars
+
+#Visulize it:
+par(mfrow = c(2, 2))
+for (var in names(COS_xmap_var_means)) {
+  plot(COS_xmap_var_means[[var]]$lib_size, pmax(0, COS_xmap_var_means[[var]]$rho), type="l",
+       xlab = "Library Size", ylab = "Cross Map Skill (rho)", 
+       col = "red", ylim = c(0, 1), lwd = 2)
+  lines(var_xmap_COS_means[[var]]$lib_size, pmax(0, var_xmap_COS_means[[var]]$rho), col = "blue", 
+        lwd = 2)
+  legend(x = "topleft", col = c("red", "blue"), lwd = 2, legend = c("COS_xmap_var", 
+                                                                    "var_xmap_COS"), inset = 0.02, bty = "n", cex = 0.8)
+  title(names(COS_xmap_var_means[var]))
+  abline(h = 0, lty = 3)
+}
+
+
+###########################################
+#benzene
+
+ccm_out_benzeneLib <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = "benzene",
+      target_column = var, E = best_E["benzene"],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_benzeneLib)<-vars
+
+ccm_out_benzeneTar <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = var,
+      target_column = "benzene", E = best_E[var],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_benzeneTar)<-vars
+
+benzene_xmap_var_means <- lapply(vars, function(var) {ccm_means(ccm_out_benzeneLib[[var]])})
+var_xmap_benzene_means <- lapply(vars, function(var) {ccm_means(ccm_out_benzeneTar[[var]])})
+
+names(benzene_xmap_var_means)<-vars
+names(var_xmap_benzene_means)<-vars
+
+#Visulize it:
+par(mfrow = c(2, 2))
+for (var in names(benzene_xmap_var_means)) {
+  plot(benzene_xmap_var_means[[var]]$lib_size, pmax(0, benzene_xmap_var_means[[var]]$rho), type="l",
+       xlab = "Library Size", ylab = "Cross Map Skill (rho)", 
+       col = "red", ylim = c(0, 1), lwd = 2)
+  lines(var_xmap_benzene_means[[var]]$lib_size, pmax(0, var_xmap_benzene_means[[var]]$rho), col = "blue", 
+        lwd = 2)
+  legend(x = "topleft", col = c("red", "blue"), lwd = 2, legend = c("benzene_xmap_var", 
+                                                                    "var_xmap_benzene"), inset = 0.02, bty = "n", cex = 0.8)
+  title(names(benzene_xmap_var_means[var]))
+  abline(h = 0, lty = 3)
+}
+
+
+###########################################
+#toluene
+
+ccm_out_tolueneLib <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = "toluene",
+      target_column = var, E = best_E["toluene"],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_tolueneLib)<-vars
+
+ccm_out_tolueneTar <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = var,
+      target_column = "toluene", E = best_E[var],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_tolueneTar)<-vars
+
+toluene_xmap_var_means <- lapply(vars, function(var) {ccm_means(ccm_out_tolueneLib[[var]])})
+var_xmap_toluene_means <- lapply(vars, function(var) {ccm_means(ccm_out_tolueneTar[[var]])})
+
+names(toluene_xmap_var_means)<-vars
+names(var_xmap_toluene_means)<-vars
+
+#Visulize it:
+par(mfrow = c(2, 2))
+for (var in names(toluene_xmap_var_means)) {
+  plot(toluene_xmap_var_means[[var]]$lib_size, pmax(0, toluene_xmap_var_means[[var]]$rho), type="l",
+       xlab = "Library Size", ylab = "Cross Map Skill (rho)", 
+       col = "red", ylim = c(0, 1), lwd = 2)
+  lines(var_xmap_toluene_means[[var]]$lib_size, pmax(0, var_xmap_toluene_means[[var]]$rho), col = "blue", 
+        lwd = 2)
+  legend(x = "topleft", col = c("red", "blue"), lwd = 2, legend = c("toluene_xmap_var", 
+                                                                    "var_xmap_toluene"), inset = 0.02, bty = "n", cex = 0.8)
+  title(names(toluene_xmap_var_means[var]))
+  abline(h = 0, lty = 3)
+}
+
+
+###########################################
+#Temperature
+
+ccm_out_TempLib <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = "Temp",
+      target_column = var, E = best_E["Temp"],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_TempLib)<-vars
+
+ccm_out_TempTar <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = var,
+      target_column = "Temp", E = best_E[var],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_TempTar)<-vars
+
+Temp_xmap_var_means <- lapply(vars, function(var) {ccm_means(ccm_out_TempLib[[var]])})
+var_xmap_Temp_means <- lapply(vars, function(var) {ccm_means(ccm_out_TempTar[[var]])})
+
+names(Temp_xmap_var_means)<-vars
+names(var_xmap_Temp_means)<-vars
+
+#Visulize it:
+par(mfrow = c(2, 2))
+for (var in names(Temp_xmap_var_means)) {
+  plot(Temp_xmap_var_means[[var]]$lib_size, pmax(0, Temp_xmap_var_means[[var]]$rho), type="l",
+       xlab = "Library Size", ylab = "Cross Map Skill (rho)", 
+       col = "red", ylim = c(0, 1), lwd = 2)
+  lines(var_xmap_Temp_means[[var]]$lib_size, pmax(0, var_xmap_Temp_means[[var]]$rho), col = "blue", 
+        lwd = 2)
+  legend(x = "topleft", col = c("red", "blue"), lwd = 2, legend = c("Temp_xmap_var", 
+                                                                    "var_xmap_Temp"), inset = 0.02, bty = "n", cex = 0.8)
+  title(names(Temp_xmap_var_means[var]))
+  abline(h = 0, lty = 3)
+}
+
+
+
+###########################################
+#Avg._Phaeo
+
+ccm_out_Avg._PhaeoLib <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = "Avg._Phaeo",
+      target_column = var, E = best_E["Avg._Phaeo"],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_Avg._PhaeoLib)<-vars
+
+ccm_out_Avg._PhaeoTar <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = var,
+      target_column = "Avg._Phaeo", E = best_E[var],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_Avg._PhaeoTar)<-vars
+
+Avg._Phaeo_xmap_var_means <- lapply(vars, function(var) {ccm_means(ccm_out_Avg._PhaeoLib[[var]])})
+var_xmap_Avg._Phaeo_means <- lapply(vars, function(var) {ccm_means(ccm_out_Avg._PhaeoTar[[var]])})
+
+names(Avg._Phaeo_xmap_var_means)<-vars
+names(var_xmap_Avg._Phaeo_means)<-vars
+
+#Visulize it:
+par(mfrow = c(2, 2))
+for (var in names(Avg._Phaeo_xmap_var_means)) {
+  plot(Avg._Phaeo_xmap_var_means[[var]]$lib_size, pmax(0, Avg._Phaeo_xmap_var_means[[var]]$rho), type="l",
+       xlab = "Library Size", ylab = "Cross Map Skill (rho)", 
+       col = "red", ylim = c(0, 1), lwd = 2)
+  lines(var_xmap_Avg._Phaeo_means[[var]]$lib_size, pmax(0, var_xmap_Avg._Phaeo_means[[var]]$rho), col = "blue", 
+        lwd = 2)
+  legend(x = "topleft", col = c("red", "blue"), lwd = 2, legend = c("Avg._Phaeo_xmap_var", 
+                                                                    "var_xmap_Avg._Phaeo"), inset = 0.02, bty = "n", cex = 0.8)
+  title(names(Avg._Phaeo_xmap_var_means[var]))
+  abline(h = 0, lty = 3)
+}
+
+
+###########################################
+#Avg_Chloro
+
+ccm_out_Avg_ChloroLib <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = "Avg_Chloro",
+      target_column = var, E = best_E["Avg_Chloro"],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_Avg_ChloroLib)<-vars
+
+ccm_out_Avg_ChloroTar <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = var,
+      target_column = "Avg_Chloro", E = best_E[var],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_Avg_ChloroTar)<-vars
+
+Avg_Chloro_xmap_var_means <- lapply(vars, function(var) {ccm_means(ccm_out_Avg_ChloroLib[[var]])})
+var_xmap_Avg_Chloro_means <- lapply(vars, function(var) {ccm_means(ccm_out_Avg_ChloroTar[[var]])})
+
+names(Avg_Chloro_xmap_var_means)<-vars
+names(var_xmap_Avg_Chloro_means)<-vars
+
+#Visulize it:
+par(mfrow = c(2, 2))
+for (var in names(Avg_Chloro_xmap_var_means)) {
+  plot(Avg_Chloro_xmap_var_means[[var]]$lib_size, pmax(0, Avg_Chloro_xmap_var_means[[var]]$rho), type="l",
+       xlab = "Library Size", ylab = "Cross Map Skill (rho)", 
+       col = "red", ylim = c(0, 1), lwd = 2)
+  lines(var_xmap_Avg_Chloro_means[[var]]$lib_size, pmax(0, var_xmap_Avg_Chloro_means[[var]]$rho), col = "blue", 
+        lwd = 2)
+  legend(x = "topleft", col = c("red", "blue"), lwd = 2, legend = c("Avg_Chloro_xmap_var", 
+                                                                    "var_xmap_Avg_Chloro"), inset = 0.02, bty = "n", cex = 0.8)
+  title(names(Avg_Chloro_xmap_var_means[var]))
+  abline(h = 0, lty = 3)
+}
+
+
+###########################################
+#Total.Zooplankton
+
+ccm_out_Total.ZooplanktonLib <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = "Total.Zooplankton",
+      target_column = var, E = best_E["Total.Zooplankton"],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_Total.ZooplanktonLib)<-vars
+
+ccm_out_Total.ZooplanktonTar <- lapply(vars, function(var) {
+  ccm(CommunityEnvtVOCsComplete, lib_column = var,
+      target_column = "Total.Zooplankton", E = best_E[var],
+      num_samples = 100, lib_sizes = lib_sizes,
+      random_libs = TRUE, silent = TRUE, tau = 1, tp=1)
+})
+
+names(ccm_out_Total.ZooplanktonTar)<-vars
+
+Total.Zooplankton_xmap_var_means <- lapply(vars, function(var) {ccm_means(ccm_out_Total.ZooplanktonLib[[var]])})
+var_xmap_Total.Zooplankton_means <- lapply(vars, function(var) {ccm_means(ccm_out_Total.ZooplanktonTar[[var]])})
+
+names(Total.Zooplankton_xmap_var_means)<-vars
+names(var_xmap_Total.Zooplankton_means)<-vars
+
+#Visulize it:
+par(mfrow = c(2, 2))
+for (var in names(Total.Zooplankton_xmap_var_means)) {
+  plot(Total.Zooplankton_xmap_var_means[[var]]$lib_size, pmax(0, Total.Zooplankton_xmap_var_means[[var]]$rho), type="l",
+       xlab = "Library Size", ylab = "Cross Map Skill (rho)", 
+       col = "red", ylim = c(0, 1), lwd = 2)
+  lines(var_xmap_Total.Zooplankton_means[[var]]$lib_size, pmax(0, var_xmap_Total.Zooplankton_means[[var]]$rho), col = "blue", 
+        lwd = 2)
+  legend(x = "topleft", col = c("red", "blue"), lwd = 2, legend = c("Total.Zooplankton_xmap_var", 
+                                                                    "var_xmap_Total.Zooplankton"), inset = 0.02, bty = "n", cex = 0.8)
+  title(names(Total.Zooplankton_xmap_var_means[var]))
+  abline(h = 0, lty = 3)
+}
+
+
+save.image("~/Desktop/ScrippsProjects/PierData/AlgaeEnvt/VOCs_Algae_ccm_Workspace_scaled_tp1.RData")
